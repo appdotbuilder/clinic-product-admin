@@ -1,28 +1,74 @@
+import { db } from '../db';
+import { usersTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { type User } from '../schema';
 
-export async function authenticateUser(token?: string): Promise<User | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to authenticate users and return user info including role.
-    // For now, we'll return a dummy admin user if a token is provided, null otherwise.
-    
+export const authenticateUser = async (token?: string): Promise<User | null> => {
+  try {
+    // If no token provided, return null (unauthenticated)
     if (!token) {
-        return null;
+      return null;
     }
+
+    // For this implementation, we'll treat the token as a simple user identifier
+    // In a real system, this would involve JWT validation and user ID extraction
     
-    // Dummy admin user for testing purposes
-    const dummyAdminUser: User = {
-        id: 1,
-        username: 'admin',
-        email: 'admin@clinic.com',
-        role: 'admin',
-        created_at: new Date('2024-01-01T00:00:00Z')
+    // Parse token to extract user identifier
+    // For simplicity, we'll assume token format is "user:{id}" or just the username
+    let userId: number | null = null;
+    let username: string | null = null;
+
+    if (token.startsWith('user:')) {
+      // Token format: "user:123"
+      const idPart = token.substring(5);
+      const parsedId = parseInt(idPart, 10);
+      if (!isNaN(parsedId)) {
+        userId = parsedId;
+      }
+    } else {
+      // Token is treated as username
+      username = token;
+    }
+
+    // Query user from database
+    let user;
+    
+    if (userId) {
+      // Query by ID
+      const users = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .execute();
+      
+      user = users[0];
+    } else if (username) {
+      // Query by username
+      const users = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.username, username))
+        .execute();
+      
+      user = users[0];
+    } else {
+      // Invalid token format
+      return null;
+    }
+
+    // If no user found, return null
+    if (!user) {
+      return null;
+    }
+
+    // Return user data (created_at is already a Date object from the database)
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      created_at: user.created_at
     };
-    
-    // In a real implementation, this would:
-    // 1. Validate the JWT token
-    // 2. Extract user ID from token
-    // 3. Query database for user details
-    // 4. Return user object with role information
-    
-    return Promise.resolve(dummyAdminUser);
-}
+  } catch (error) {
+    console.error('User authentication failed:', error);
+    throw error;
+  }
+};
